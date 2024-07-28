@@ -2,10 +2,10 @@
 
 #define X_TILE_COUNT 128
 #define Y_TILE_COUNT 128
+#define TILE_COUNT (Y_TILE_COUNT * X_TILE_COUNT)
 
 #define TILE_WIDTH 64
 #define TILE_HEIGHT 64
-#define TILE_COUNT (TILE_WIDTH * TILE_HEIGHT)
 
 #define WORLD_WIDTH  (X_TILE_COUNT * TILE_WIDTH)
 #define WORLD_HEIGHT (Y_TILE_COUNT * TILE_HEIGHT)
@@ -37,12 +37,14 @@ typedef enum {
 	APP_STATE_PLAYING
 } App_State;
 
-float32 delta_time = 0;
+f32 delta_time = 0;
 App_State app_state = APP_STATE_EDITING;
 
 s64 current_tile_layer = 0;
 
 Matrix4 camera_view;
+
+Gfx_Image *hammer_image;
 
 void update_editor();
 void update_game();
@@ -56,7 +58,10 @@ int entry(int argc, char **argv) {
 	window.y = 90;
 	window.clear_color = hex_to_rgba(0x6495EDff);
 	
-	camera_view = m4_scalar(1.0);
+	camera_view = m4_translate(m4_scalar(1.0), v3(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 0));
+
+	hammer_image = load_image_from_disk(STR("oogabooga/examples/hammer.png"), get_heap_allocator());
+	assert(hammer_image);
 
 	float64 last_time = os_get_current_time_in_seconds();
 	while (!window.should_close) {
@@ -74,6 +79,8 @@ int entry(int argc, char **argv) {
 		} else if (app_state == APP_STATE_PLAYING) {
 			update_game();
 		}
+
+		draw_rect(v2(0, 0), v2(100, 100), v4(1,0,0,1));
 		
 		os_update(); 
 		gfx_update();
@@ -120,28 +127,50 @@ void update_editor() {
 	if (is_key_down('W')) {
 		cam_move_axis.y += 1.0;
 	}
+
+	
 	
 	Vector2 cam_move = v2_mulf(cam_move_axis, delta_time * cam_move_speed);
 	camera_view = m4_translate(camera_view, v3(v2_expand(cam_move), 0));
 	draw_frame.view = camera_view;
 	
-	Vector2 bottom_left = screen_to_world(v2(-window.width/2, -window.height/2));
-	Vector2 top_right   = screen_to_world(v2( window.width/2,  window.height/2));
+	Vector2 bottom_left = screen_to_world(v2(0, 0));
+	Vector2 top_right   = screen_to_world(v2(window.width, window.height));
 	
-	Vector2 origin = v2(-WORLD_WIDTH/2, -WORLD_HEIGHT/2);
+	Vector2 origin = v2(0, 0);
 	int first_visible_tile_x = ((origin.x + bottom_left.x)/WORLD_WIDTH) *X_TILE_COUNT;
 	int first_visible_tile_y = ((origin.y + bottom_left.y)/WORLD_HEIGHT)*Y_TILE_COUNT;
 	int last_visible_tile_x  = ((origin.x + top_right.x  )/WORLD_WIDTH) *X_TILE_COUNT;
 	int last_visible_tile_y  = ((origin.y + top_right.y  )/WORLD_HEIGHT)*Y_TILE_COUNT;
+
+	int left_edge = -X_TILE_COUNT / 2;
+	left_edge = 0;
+	int right_edge = X_TILE_COUNT / 2;
+	right_edge = X_TILE_COUNT;
+	int top_edge = Y_TILE_COUNT / 2;
+	top_edge = Y_TILE_COUNT;
+	int bottom_edge = -Y_TILE_COUNT / 2;
+	bottom_edge = 0;
+	first_visible_tile_x = clamp(first_visible_tile_x, left_edge, right_edge);
+	log_info("first visible x %d", first_visible_tile_x);
+	last_visible_tile_x = clamp(last_visible_tile_x, left_edge, right_edge);
+	log_info("first visible y %d", last_visible_tile_x);
+	first_visible_tile_y = clamp(first_visible_tile_y, bottom_edge, top_edge);
+	log_info("last visible x %d", first_visible_tile_y);
+	last_visible_tile_y = clamp(last_visible_tile_y, bottom_edge, top_edge);
+	log_info("last visible y %d", last_visible_tile_y);
 	
 	// Visualize empty tile grid & react to mouse
 	push_z_layer(Z_LAYER_TILE_GRID);
 	
-	for (s32 tile_x = first_visible_tile_x; tile_x <= last_visible_tile_x; tile_x += 1) {
-		for (s32 tile_y = first_visible_tile_y; tile_y <=last_visible_tile_y; tile_y += 1) {
+	int selected_x = 0;
+	int selected_y = 0;
+	for (s32 tile_x = first_visible_tile_x; tile_x <= last_visible_tile_x; tile_x++) {
+		for (s32 tile_y = first_visible_tile_y; tile_y <=last_visible_tile_y; tile_y++) {
 			bool variation = (tile_x%2==0 && tile_y%2==1) || (tile_x%2==1 && tile_y%2==0);
 			
 			Vector2 pos = v2_add(origin, v2(tile_x*TILE_WIDTH, tile_y*TILE_HEIGHT));
+			//log_verbose("%d, %d", tile_x, pos.y);
 			draw_rect(pos, v2(TILE_WIDTH, TILE_HEIGHT), variation?v4(.27,.27,.27,1):v4(.3,.3,.3,1));
 			
 			push_z_layer(Z_LAYER_EDITOR_GUI);
@@ -154,22 +183,31 @@ void update_editor() {
 			bool hovered = m.x >= left && m.x < right && m.y >= bottom && m.y < top;
 			
 			if (hovered) {
+				selected_x = tile_x;
+				selected_y = tile_y;
 				draw_rect(pos, v2(TILE_WIDTH, TILE_HEIGHT), v4(0, 0, 0, 0.3));
 			}
 			
 			pop_z_layer();
 		}
 	}
+
+	if (is_key_just_pressed(MOUSE_BUTTON_LEFT)) {
+		Tile_Layer* layer = &tile_layers[0];
+		layer->tile_images[get_tile_index(selected_x, selected_y)] = hammer_image;
+	}
+
 	pop_z_layer();
 	
 	for (int i = 0; i < MAX_LAYERS; i++) {
 		Tile_Layer *layer = &tile_layers[i];
 		push_z_layer(Z_LAYER_TILE_LAYER_BASE + i);
-		Vector2 origin = v2(-WORLD_WIDTH/2, -WORLD_HEIGHT/2);
 		for (s32 tile_x = first_visible_tile_x; tile_x <= last_visible_tile_x; tile_x += 1) {
 			for (s32 tile_y = first_visible_tile_y; tile_y <=last_visible_tile_y; tile_y += 1) {
-				Gfx_Image *img = layer->tile_images[get_tile_index(tile_x, tile_y)];
+				u64 tile_index = get_tile_index(tile_x, tile_y);
+				Gfx_Image *img = layer->tile_images[tile_index];
 				if (img) {
+					log_verbose("drawing img at %d", tile_index);
 					Vector2 pos = v2_add(origin, v2(tile_x*TILE_WIDTH, tile_y*TILE_HEIGHT));
 					draw_image(img, pos, v2(TILE_WIDTH, TILE_HEIGHT), COLOR_WHITE);
 				}

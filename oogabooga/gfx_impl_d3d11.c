@@ -623,7 +623,6 @@ void d3d11_process_draw_frame() {
 				s8 texture_index = -1;
 				
 				if (q->image) {
-					
 					if (last_texture == q->image->gfx_handle) {
 						texture_index = last_texture_index;
 					} else {
