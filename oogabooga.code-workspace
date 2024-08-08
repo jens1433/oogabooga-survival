@@ -7,7 +7,9 @@
 	"settings": {
 		"files.associations": {
 			"algorithm": "c",
-			"cmath": "c"
+			"cmath": "c",
+			"xutility": "c",
+			"utility": "c"
 		}
 	}
 }

@@ -289,7 +289,6 @@ typedef u8 bool;
 #include "utility.c"
 
 #include "hash_table.c"
-#include "growing_array.c"
 
 #include "os_interface.c"
 
@@ -311,6 +310,8 @@ typedef u8 bool;
 #include "color.c"
 #include "memory.c"
 #include "input.c"
+
+#include "growing_array.c"
 
 #ifndef OOGABOOGA_HEADLESS
 
